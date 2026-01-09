@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>B. Sony | Lab Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'lab-dark': '#020617',
+                        'lab-panel': '#0f172a',
+                        'lab-accent': '#10b981', 
+                        'lab-text': '#e2e8f0',
+                        'lab-muted': '#64748b'
+                    },
+                    fontFamily: {
+                        mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;700;800&display=swap');
+        body { background-color: #020617; font-family: 'JetBrains Mono', monospace; overflow: hidden; margin: 0; }
+        .scanlines {
+            background: linear-gradient(to bottom, transparent, transparent 50%, rgba(0,0,0,0.2) 50%, rgba(0,0,0,0.2));
+            background-size: 100% 4px;
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            pointer-events: none; z-index: 50; opacity: 0.15;
+        }
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        #webgl-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 0; opacity: 0.5; }
+        .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #10b981; border-radius: 10px; }
+
+        .skill-node { border-left: 1px solid rgba(16, 185, 129, 0.2); padding-left: 1rem; margin-bottom: 1.5rem; transition: all 0.3s ease; }
+        .skill-node:hover { border-left-color: #10b981; background: rgba(16, 185, 129, 0.02); }
+        
+        .resume-node { border-left: 1px solid rgba(16, 185, 129, 0.3); padding-left: 1.5rem; position: relative; margin-bottom: 2rem; }
+        .resume-node::before { content: ''; position: absolute; left: -4px; top: 0; width: 7px; height: 7px; background: #10b981; border-radius: 50%; }
+        
+        .contact-link { transition: all 0.3s ease; border: 1px solid rgba(16, 185, 129, 0.1); }
+        .contact-link:hover { border-color: #10b981; background: rgba(16, 185, 129, 0.05); transform: translateY(-2px); }
+
+        .chat-bubble { max-width: 85%; padding: 0.75rem 1rem; border-radius: 1rem; font-size: 0.75rem; line-height: 1.4; }
+        .chat-bubble-user { background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); color: #fff; align-self: flex-end; border-bottom-right-radius: 0.25rem; }
+        .chat-bubble-ai { background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(255, 255, 255, 0.05); color: #e2e8f0; align-self: flex-start; border-bottom-left-radius: 0.25rem; }
+        .typing-dot { width: 4px; height: 4px; background: #10b981; border-radius: 50%; animation: typing 1s infinite ease-in-out; }
+        @keyframes typing { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+        
+        .exp-card { transition: transform 0.3s ease; }
+        .exp-card:hover { transform: translateY(-5px); }
+    </style>
+</head>
+<body class="text-lab-text">
+
+    <div id="webgl-container"></div>
+    <div class="scanlines"></div>
+
+    <div class="relative z-10 flex flex-col h-screen">
+        <!-- Header -->
+        <header class="h-16 glass-panel border-b border-white/5 flex items-center justify-between px-6 shrink-0">
+            <div class="flex items-center gap-4">
+                <div class="p-2 bg-lab-accent/10 rounded-lg border border-lab-accent/20">
+                    <i data-lucide="brain-circuit" class="w-5 h-5 text-lab-accent"></i>
+                </div>
+                <div>
+                    <h1 class="text-xs font-bold tracking-[0.2em] text-white uppercase">B. Sony // Tech_Architect</h1>
+                    <div class="flex items-center gap-2 mt-0.5">
+                        <span class="w-1.5 h-1.5 rounded-full bg-lab-accent animate-pulse"></span>
+                        <span class="text-[9px] text-lab-muted font-bold tracking-widest uppercase">Sync_Active</span>
+                    </div>
+                </div>
+            </div>
+            <div class="text-[10px] font-mono text-lab-accent bg-lab-accent/5 px-3 py-1.5 rounded border border-lab-accent/10" id="sys-clock">00:00:00 UTC</div>
+        </header>
+
+        <div class="flex flex-1 overflow-hidden">
+            <!-- Navigation -->
+            <nav class="w-16 md:w-64 glass-panel border-r border-white/5 flex flex-col py-6">
+                <div class="flex flex-col gap-2 px-3 overflow-y-auto flex-1">
+                    <button onclick="switchTab('dashboard')" class="nav-btn bg-white/10 text-white border-l-2 border-lab-accent group flex items-center gap-4 p-3 rounded-lg" data-tab="dashboard">
+                        <i data-lucide="layout" class="w-5 h-5"></i>
+                        <span class="hidden md:block text-[10px] font-bold uppercase tracking-widest">Dashboard</span>
+                    </button>
+                    <button onclick="switchTab('projects')" class="nav-btn group flex items-center gap-4 p-3 rounded-lg text-lab-muted hover:text-white" data-tab="projects">
+                        <i data-lucide="flask-conical" class="w-5 h-5"></i>
+                        <span class="hidden md:block text-[10px] font-bold uppercase tracking-widest">Experiments</span>
+                    </button>
+                    <button onclick="switchTab('skills')" class="nav-btn group flex items-center gap-4 p-3 rounded-lg text-lab-muted hover:text-white" data-tab="skills">
+                        <i data-lucide="cpu" class="w-5 h-5"></i>
+                        <span class="hidden md:block text-[10px] font-bold uppercase tracking-widest">Neural_Skills</span>
+                    </button>
+                    <button onclick="switchTab('resume')" class="nav-btn group flex items-center gap-4 p-3 rounded-lg text-lab-muted hover:text-white" data-tab="resume">
+                        <i data-lucide="file-text" class="w-5 h-5"></i>
+                        <span class="hidden md:block text-[10px] font-bold uppercase tracking-widest">Experience_Log</span>
+                    </button>
+                    <button onclick="switchTab('contact')" class="nav-btn group flex items-center gap-4 p-3 rounded-lg text-lab-muted hover:text-white" data-tab="contact">
+                        <i data-lucide="at-sign" class="w-5 h-5"></i>
+                        <span class="hidden md:block text-[10px] font-bold uppercase tracking-widest">Comm_Link</span>
+                    </button>
+                    <button onclick="switchTab('ai-lab')" class="nav-btn group flex items-center gap-4 p-3 rounded-lg text-lab-muted hover:text-white" data-tab="ai-lab">
+                        <i data-lucide="message-square-code" class="w-5 h-5"></i>
+                        <span class="hidden md:block text-[10px] font-bold uppercase tracking-widest">Handshake_Chat</span>
+                    </button>
+                </div>
+            </nav>
+
+            <main class="flex-1 overflow-y-auto p-6 md:p-10 relative pb-24">
+                <!-- DASHBOARD -->
+                <div id="dashboard" class="tab-content space-y-12 animate-fade-in">
+                    <div class="max-w-4xl space-y-8">
+                        <h2 class="text-4xl md:text-6xl font-black text-white uppercase tracking-tighter leading-tight">
+                            Building for <br>
+                            <span class="text-transparent bg-clip-text bg-gradient-to-r from-lab-accent to-emerald-700">Infinite Scalability.</span>
+                        </h2>
+                        <div class="glass-panel p-8 rounded-2xl border border-white/10 relative">
+                            <div class="flex justify-between items-center mb-6">
+                                <span class="text-lab-accent text-[10px] font-black uppercase tracking-widest">✨ System_Vision_Synthesis</span>
+                                <button onclick="synthesizeSystemState()" id="synth-btn" class="text-[8px] bg-lab-accent/10 border border-lab-accent/20 px-3 py-1 rounded hover:bg-lab-accent hover:text-lab-dark transition-all font-bold uppercase tracking-widest">Synthesize_Vision</button>
+                            </div>
+                            <div id="manifesto-text" class="text-sm md:text-base leading-relaxed space-y-4 text-lab-text/80">
+                                <p>Architecting the intersection of <span class="text-lab-accent">Machine Learning</span> and <span class="text-lab-accent">Infrastructure Automation</span>. Specializing in high-throughput network telemetry, cloud security auditing, and forensic computer vision.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SKILLS MATRIX -->
+                <div id="skills" class="tab-content hidden space-y-10 animate-fade-in">
+                    <div class="space-y-2">
+                        <h2 class="text-3xl font-black text-white uppercase italic tracking-tighter">Neural_Skills_Matrix</h2>
+                        <p class="text-[9px] text-lab-muted uppercase tracking-[0.3em] font-bold">Optimization_Core_V2</p>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <div class="glass-panel p-6 rounded-2xl border border-white/5 space-y-4">
+                            <h3 class="text-xs font-black text-lab-accent uppercase flex items-center gap-2">
+                                <i data-lucide="code-2" class="w-4 h-4"></i> Languages & R&D
+                            </h3>
+                            <div class="space-y-3">
+                                <div class="skill-node"><p class="text-[10px] font-bold text-white">Python (FastAPI, Flask, PyTorch)</p></div>
+                                <div class="skill-node"><p class="text-[10px] font-bold text-white">Julia (Flux.jl, Zygote, Optimization.jl)</p></div>
+                                <div class="skill-node"><p class="text-[10px] font-bold text-white">JS/HTML/TailwindCSS</p></div>
+                            </div>
+                        </div>
+                        <div class="glass-panel p-6 rounded-2xl border border-white/5 space-y-4">
+                            <h3 class="text-xs font-black text-lab-accent uppercase flex items-center gap-2">
+                                <i data-lucide="server" class="w-4 h-4"></i> Architecture & Infra
+                            </h3>
+                            <div class="space-y-3">
+                                <div class="skill-node"><p class="text-[10px] font-bold text-white">Stream-based Telemetry (WebSockets)</p></div>
+                                <div class="skill-node"><p class="text-[10px] font-bold text-white">Cloud Security Auditing (Policy-driven)</p></div>
+                                <div class="skill-node"><p class="text-[10px] font-bold text-white">Multi-Agent AI Pipelines</p></div>
+                            </div>
+                        </div>
+                        <div class="glass-panel p-6 rounded-2xl border border-white/5 space-y-4">
+                            <h3 class="text-xs font-black text-lab-accent uppercase flex items-center gap-2">
+                                <i data-lucide="eye" class="w-4 h-4"></i> Computer Vision & ML
+                            </h3>
+                            <div class="space-y-3">
+                                <div class="skill-node"><p class="text-[10px] font-bold text-white">CNN Image Forensics (OpenCV)</p></div>
+                                <div class="skill-node"><p class="text-[10px] font-bold text-white">Neural Network Metamorphism</p></div>
+                                <div class="skill-node"><p class="text-[10px] font-bold text-white">RAG / LLM Orchestration</p></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PROJECTS / ACTIVE EXPERIMENTS -->
+                <div id="projects" class="tab-content hidden space-y-10 animate-fade-in">
+                    <div class="space-y-2">
+                        <h2 class="text-3xl font-black text-white uppercase italic tracking-tighter">Active_Experiments</h2>
+                        <p class="text-[9px] text-lab-muted uppercase tracking-[0.3em] font-bold">Research_&_Development_Archive</p>
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <!-- Neural_Flow v2.0 -->
+                        <div class="exp-card glass-panel p-6 rounded-2xl border border-white/5 hover:border-lab-accent/30 flex flex-col">
+                            <div class="flex justify-between mb-4">
+                                <i data-lucide="activity" class="w-5 h-5 text-lab-accent"></i>
+                                <span class="text-[8px] font-black uppercase text-lab-accent bg-lab-accent/10 px-2 py-1 rounded">Real-Time Visualization</span>
+                            </div>
+                            <h3 class="text-sm font-bold text-white mb-1">Neural_Flow v2.0</h3>
+                            <p class="text-[9px] font-mono text-lab-muted mb-4 uppercase">Python, FastAPI, WebSockets, Data Streaming</p>
+                            <p class="text-[11px] text-lab-text/70 mb-4">Developed a real-time visualization system for high-throughput network telemetry using Python backends and low-latency pipelines for traffic pattern and anomaly detection.</p>
+                            <div class="mt-auto flex flex-wrap gap-2">
+                                <span class="text-[8px] border border-white/10 px-2 py-1 rounded">Telemetry</span>
+                                <span class="text-[8px] border border-white/10 px-2 py-1 rounded">High-Throughput</span>
+                            </div>
+                        </div>
+
+                        <!-- Sentinel_Core -->
+                        <div class="exp-card glass-panel p-6 rounded-2xl border border-white/5 hover:border-cyan-400/30 flex flex-col">
+                            <div class="flex justify-between mb-4">
+                                <i data-lucide="shield-check" class="w-5 h-5 text-cyan-400"></i>
+                                <span class="text-[8px] font-black uppercase text-cyan-400 bg-cyan-400/10 px-2 py-1 rounded">Security Framework</span>
+                            </div>
+                            <h3 class="text-sm font-bold text-white mb-1">Sentinel_Core</h3>
+                            <p class="text-[9px] font-mono text-lab-muted mb-4 uppercase">Python, Cloud APIs, Automation Scripts</p>
+                            <p class="text-[11px] text-lab-text/70 mb-4">Automated framework to audit security posture of distributed cloud environments, implementing rule-based checks for misconfigurations and vulnerability remediation.</p>
+                            <div class="mt-auto flex flex-wrap gap-2">
+                                <span class="text-[8px] border border-white/10 px-2 py-1 rounded">Multi-Cloud</span>
+                                <span class="text-[8px] border border-white/10 px-2 py-1 rounded">Audit</span>
+                            </div>
+                        </div>
+
+                        <!-- CNN Forensics -->
+                        <div class="exp-card glass-panel p-6 rounded-2xl border border-white/5 hover:border-indigo-400/30 flex flex-col">
+                            <div class="flex justify-between mb-4">
+                                <i data-lucide="image" class="w-5 h-5 text-indigo-400"></i>
+                                <span class="text-[8px] font-black uppercase text-indigo-400 bg-indigo-400/10 px-2 py-1 rounded">Image Forensics</span>
+                            </div>
+                            <h3 class="text-sm font-bold text-white mb-1">CNN for Watermark & Copy Detection</h3>
+                            <p class="text-[9px] font-mono text-lab-muted mb-4 uppercase">Python, CNNs, OpenCV, Deep Learning</p>
+                            <p class="text-[11px] text-lab-text/70 mb-4">Built a CNN-based system to detect digital watermarks and identify manipulated images. Implemented inference pipelines for automated authenticity verification.</p>
+                            <div class="mt-auto flex flex-wrap gap-2">
+                                <span class="text-[8px] border border-white/10 px-2 py-1 rounded">Copyright</span>
+                                <span class="text-[8px] border border-white/10 px-2 py-1 rounded">Forensics</span>
+                            </div>
+                        </div>
+
+                        <!-- Julia Optimization -->
+                        <div class="exp-card glass-panel p-6 rounded-2xl border border-white/5 hover:border-purple-400/30 flex flex-col">
+                            <div class="flex justify-between mb-4">
+                                <i data-lucide="wind" class="w-5 h-5 text-purple-400"></i>
+                                <span class="text-[8px] font-black uppercase text-purple-400 bg-purple-400/10 px-2 py-1 rounded">Numerical Opt</span>
+                            </div>
+                            <h3 class="text-sm font-bold text-white mb-1">Urban Air Dispersion Model</h3>
+                            <p class="text-[9px] font-mono text-lab-muted mb-4 uppercase">Julia, Flux.jl, Optimization.jl, Zygote</p>
+                            <p class="text-[11px] text-lab-text/70 mb-4">Designed air pollution model with gradient-based optimization. Utilized automatic differentiation for custom loss function minimization in the Julia ecosystem.</p>
+                            <div class="mt-auto flex flex-wrap gap-2">
+                                <span class="text-[8px] border border-white/10 px-2 py-1 rounded">ADAM</span>
+                                <span class="text-[8px] border border-white/10 px-2 py-1 rounded">Auto-Diff</span>
+                            </div>
+                        </div>
+
+                        <!-- Metamorphic Generator -->
+                        <div class="exp-card glass-panel p-6 rounded-2xl border border-white/5 hover:border-pink-400/30 flex flex-col">
+                            <div class="flex justify-between mb-4">
+                                <i data-lucide="dna" class="w-5 h-5 text-pink-400"></i>
+                                <span class="text-[8px] font-black uppercase text-pink-400 bg-pink-400/10 px-2 py-1 rounded">Robustness Testing</span>
+                            </div>
+                            <h3 class="text-sm font-bold text-white mb-1">Metamorphic Neural Network Generator</h3>
+                            <p class="text-[9px] font-mono text-lab-muted mb-4 uppercase">PyTorch, FPDF, WeasyPrint</p>
+                            <p class="text-[11px] text-lab-text/70 mb-4">Built a tool for robustness testing by generating mutated neural networks (layer perturbation, activation shifts) and comparing variant performance.</p>
+                            <div class="mt-auto flex flex-wrap gap-2">
+                                <span class="text-[8px] border border-white/10 px-2 py-1 rounded">Mutation</span>
+                                <span class="text-[8px] border border-white/10 px-2 py-1 rounded">PyTorch</span>
+                            </div>
+                        </div>
+
+                        <!-- Auto-Newsroom -->
+                        <div class="exp-card glass-panel p-6 rounded-2xl border border-white/5 hover:border-lab-accent/30 flex flex-col">
+                            <div class="flex justify-between mb-4">
+                                <i data-lucide="newspaper" class="w-5 h-5 text-lab-accent"></i>
+                                <span class="text-[8px] font-black uppercase text-lab-accent bg-lab-accent/10 px-2 py-1 rounded">Multi-Agent AI</span>
+                            </div>
+                            <h3 class="text-sm font-bold text-white mb-1">Auto-Newsroom Agent System</h3>
+                            <p class="text-[9px] font-mono text-lab-muted mb-4 uppercase">Python, Flask, Hugging Face, SQLite</p>
+                            <p class="text-[11px] text-lab-text/70 mb-4">Multi-agent platform for automated news generation, fact-checking, and summarization using BART/GPT-2 and modular agent architectures.</p>
+                            <div class="mt-auto flex flex-wrap gap-2">
+                                <span class="text-[8px] border border-white/10 px-2 py-1 rounded">BART</span>
+                                <span class="text-[8px] border border-white/10 px-2 py-1 rounded">Hugging Face</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- RESUME / EXPERIENCE LOG -->
+                <div id="resume" class="tab-content hidden space-y-10 animate-fade-in">
+                    <div class="space-y-2">
+                        <h2 class="text-3xl font-black text-white uppercase italic tracking-tighter">Experience_Log</h2>
+                        <p class="text-[9px] text-lab-muted uppercase tracking-[0.3em] font-bold">Chronological System Deployment</p>
+                    </div>
+
+                    <div class="space-y-8">
+                        <div class="resume-node">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <h3 class="text-sm font-bold text-white uppercase">Trainee – GenAI Full-Stack Development</h3>
+                                    <p class="text-[10px] text-lab-accent font-black tracking-widest uppercase">Dhee Coding Lab, Bangalore</p>
+                                </div>
+                                <span class="text-[9px] font-mono text-lab-muted uppercase">Jan 2026 – Present</span>
+                            </div>
+                            <ul class="mt-3 text-[11px] text-lab-text/70 space-y-1.5 list-disc list-inside">
+                                <li>Hands-on training in Generative AI, LLMs, and prompt engineering.</li>
+                                <li>Building full-stack apps with Python, Flask/FastAPI, and RAG pipelines.</li>
+                            </ul>
+                        </div>
+
+                        <div class="resume-node">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <h3 class="text-sm font-bold text-white uppercase">AI Guest Experience Personalization</h3>
+                                    <p class="text-[10px] text-lab-accent font-black tracking-widest uppercase">Infosys Springboard</p>
+                                </div>
+                                <span class="text-[9px] font-mono text-lab-muted uppercase">Feb – Mar 2025</span>
+                            </div>
+                            <ul class="mt-3 text-[11px] text-lab-text/70 space-y-1.5 list-disc list-inside">
+                                <li>Developed an AI system using RAG for personalized guest experiences in hospitality.</li>
+                                <li>Implemented preference analysis and dynamic recommendation generation.</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CONTACT -->
+                <div id="contact" class="tab-content hidden max-w-4xl mx-auto space-y-12 animate-fade-in">
+                    <div class="text-center space-y-4">
+                        <h2 class="text-3xl font-black text-white uppercase italic tracking-tighter">Comm_Link_Protocol</h2>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <a href="mailto:sonyeda601@gmail.com" class="contact-link glass-panel p-6 rounded-2xl flex flex-col items-center gap-3">
+                            <i data-lucide="mail" class="w-6 h-6 text-lab-accent"></i>
+                            <span class="text-[10px] font-black uppercase text-white">Email_Link</span>
+                            <span class="text-[11px] text-lab-muted">sonyeda601@gmail.com</span>
+                        </a>
+                        <a href="https://github.com/sonyeda" target="_blank" class="contact-link glass-panel p-6 rounded-2xl flex flex-col items-center gap-3">
+                            <i data-lucide="github" class="w-6 h-6 text-lab-accent"></i>
+                            <span class="text-[10px] font-black uppercase text-white">Github_Repo</span>
+                            <span class="text-[11px] text-lab-muted">@sonyeda</span>
+                        </a>
+                        <a href="https://www.linkedin.com/in/baby-sony" target="_blank" class="contact-link glass-panel p-6 rounded-2xl flex flex-col items-center gap-3">
+                            <i data-lucide="linkedin" class="w-6 h-6 text-lab-accent"></i>
+                            <span class="text-[10px] font-black uppercase text-white">Professional_Sync</span>
+                            <span class="text-[11px] text-lab-muted">baby-sony</span>
+                        </a>
+                    </div>
+                </div>
+
+                <!-- AI CHAT -->
+                <div id="ai-lab" class="tab-content hidden h-full max-h-[70vh] flex flex-col space-y-6 animate-fade-in">
+                    <div id="chat-window" class="flex-1 overflow-y-auto glass-panel rounded-2xl p-6 flex flex-col gap-4 border border-white/5 scroll-smooth">
+                        <div class="chat-bubble chat-bubble-ai">[SYSTEM_INITIALIZED] Ready to discuss Neural_Flow, Sentinel_Core, Flux.jl optimization, or Multi-Agent architectures.</div>
+                    </div>
+                    <div class="relative">
+                        <input type="text" id="chat-input" class="w-full bg-lab-panel/80 border border-white/10 rounded-2xl px-6 py-4 text-xs focus:outline-none focus:border-lab-accent/50 text-white pr-16" placeholder="Query agent...">
+                        <button onclick="sendChatMessage()" class="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-lab-accent hover:scale-110 transition-transform"><i data-lucide="send" class="w-5 h-5"></i></button>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <footer class="h-12 glass-panel border-t border-white/5 px-6 flex items-center justify-between shrink-0 text-[9px] font-bold uppercase tracking-widest">
+            <div class="flex items-center gap-6"><span class="text-lab-text">sonyeda601@gmail.com</span><span class="text-lab-muted">Bangalore, IN</span></div>
+            <div class="flex items-center gap-2 text-lab-accent"><span class="w-1.5 h-1.5 bg-lab-accent rounded-full"></span><span>SECURE_LINK_ENCRYPTED</span></div>
+        </footer>
+    </div>
+
+    <script>
+        const apiKey = ""; 
+        const API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent";
+        
+        const SONY_BIO = `You are B. Sony's Neural Agent. Technical expertise: Python (FastAPI, PyTorch), Julia (Flux.jl, Zygote), Cloud Security (Sentinel_Core), Network Analytics (Neural_Flow v2.0), CNN Image Forensics, and GenAI (RAG/LLMs). Currently at Dhee Coding Lab. Use a professional, slightly robotic technical tone.`;
+
+        window.onload = function() {
+            lucide.createIcons();
+            initThreeJS();
+            startClock();
+            document.getElementById('chat-input').addEventListener('keypress', (e) => { if(e.key === 'Enter') sendChatMessage(); });
+        };
+
+        function startClock() { setInterval(() => { const el = document.getElementById('sys-clock'); if (el) el.innerText = new Date().toLocaleTimeString() + " UTC"; }, 1000); }
+
+        function switchTab(tabId) {
+            const contents = document.querySelectorAll('.tab-content');
+            contents.forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('bg-white/10', 'text-white', 'border-l-2', 'border-lab-accent'));
+            document.getElementById(tabId).classList.remove('hidden');
+            const targetNav = document.querySelector(`button[data-tab="${tabId}"]`);
+            if (targetNav) targetNav.classList.add('bg-white/10', 'text-white', 'border-l-2', 'border-lab-accent');
+        }
+
+        async function sendChatMessage() {
+            const input = document.getElementById('chat-input');
+            const windowEl = document.getElementById('chat-window');
+            const query = input.value.trim();
+            if(!query) return;
+            input.value = '';
+            
+            const userMsg = document.createElement('div');
+            userMsg.className = 'chat-bubble chat-bubble-user animate-fade-in';
+            userMsg.innerText = query;
+            windowEl.appendChild(userMsg);
+            
+            const typingMsg = document.createElement('div');
+            typingMsg.className = 'chat-bubble chat-bubble-ai flex gap-1';
+            typingMsg.innerHTML = '<div class="typing-dot"></div><div class="typing-dot" style="animation-delay:0.2s"></div><div class="typing-dot" style="animation-delay:0.4s"></div>';
+            windowEl.appendChild(typingMsg);
+            windowEl.scrollTop = windowEl.scrollHeight;
+
+            try {
+                const response = await geminiRequest(query, SONY_BIO);
+                windowEl.removeChild(typingMsg);
+                const aiMsg = document.createElement('div');
+                aiMsg.className = 'chat-bubble chat-bubble-ai animate-fade-in';
+                aiMsg.innerText = response;
+                windowEl.appendChild(aiMsg);
+            } catch (err) {
+                if (windowEl.contains(typingMsg)) windowEl.removeChild(typingMsg);
+                const errBox = document.createElement('div');
+                errBox.className = 'chat-bubble chat-bubble-ai text-red-400';
+                errBox.innerText = "[ERROR] Connection timeout.";
+                windowEl.appendChild(errBox);
+            }
+            windowEl.scrollTop = windowEl.scrollHeight;
+        }
+
+        async function synthesizeSystemState() {
+            const btn = document.getElementById('synth-btn');
+            const box = document.getElementById('manifesto-text');
+            btn.disabled = true; btn.innerText = "SYNTHESIZING...";
+            try {
+                const res = await geminiRequest("Synthesize a 2-sentence vision about combining neural network metamorphism with cloud security auditing and high-throughput network flow.", "Architectural Visionary.");
+                box.innerHTML = `<div class="p-5 bg-lab-accent/5 border-l-2 border-lab-accent italic text-lab-accent animate-fade-in">${res}</div>`;
+            } catch (e) {
+                box.innerHTML = `<p class="text-red-400 font-mono">[ERROR] Synthesis failed. Please re-sync.</p>`;
+            }
+            btn.disabled = false; btn.innerText = "Synthesize_Vision";
+        }
+
+        async function geminiRequest(prompt, systemInstruction = "") {
+            let retries = 0;
+            const delays = [1000, 2000, 4000, 8000, 16000];
+            while (retries < 5) {
+                try {
+                    const response = await fetch(`${API_URL}?key=${apiKey}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            contents: [{ parts: [{ text: prompt }] }],
+                            systemInstruction: { parts: [{ text: systemInstruction }] }
+                        })
+                    });
+                    const data = await response.json();
+                    return data.candidates?.[0]?.content?.parts?.[0]?.text || "Protocol acknowledgement: Handshake complete.";
+                } catch (error) {
+                    await new Promise(r => setTimeout(r, delays[retries]));
+                    retries++;
+                }
+            }
+            throw new Error("Timeout");
+        }
+
+        function initThreeJS() {
+            const container = document.getElementById('webgl-container');
+            const scene = new THREE.Scene();
+            const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+            const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            container.appendChild(renderer.domElement);
+            
+            const geo = new THREE.BufferGeometry();
+            const pointCount = 1200;
+            const pos = new Float32Array(pointCount * 3);
+            for(let i=0; i < pointCount * 3; i++) pos[i] = (Math.random()-0.5)*70;
+            geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+            
+            const material = new THREE.PointsMaterial({ size: 0.07, color: 0x10b981, transparent: true, opacity: 0.3 });
+            const cloud = new THREE.Points(geo, material);
+            scene.add(cloud);
+            
+            camera.position.z = 40;
+            function animate() {
+                requestAnimationFrame(animate);
+                cloud.rotation.y += 0.0004;
+                cloud.rotation.x += 0.0002;
+                renderer.render(scene, camera);
+            }
+            animate();
+            
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+        }
+    </script>
+</body>
+</html>
